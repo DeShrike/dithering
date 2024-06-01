@@ -44,13 +44,13 @@ Image ordered_dithering(Image input, int matrix_size, int matrix[matrix_size][ma
    int dx = 0;
    int dy = 0;
    int r, g, b;
-   for (int x = 0; x < input.width; ++x)
+   for (int y = 0; y < input.height; ++y)
    {
-      for (int y = 0; y < input.height; ++y)
+      for (int x = 0; x < input.width; ++x)
       {
          get_pixel(input, x, y, &r, &g, &b);
 
-         int c = r < 255 / (matrix[dx][dy] + 1) ? 0 : 255;
+         int c = r < 255 / (matrix[dy][dx] + 1) ? 0 : 255;
 
          set_pixel(out_image, x, y, c, c, c);
          dx = (dx + 1) % matrix_size;
@@ -59,6 +59,95 @@ Image ordered_dithering(Image input, int matrix_size, int matrix[matrix_size][ma
       dy = (dy + 1) % matrix_size;
    }
 
+   return out_image;
+}
+
+Image ordered_color_dithering(Image input, int matrix_size, int matrix[matrix_size][matrix_size])
+{
+   Image out_image = alloc_image(input.width, input.height);
+
+   int dx = 0;
+   int dy = 0;
+   int r, g, b;
+   for (int y = 0; y < input.height; ++y)
+   {
+      for (int x = 0; x < input.width; ++x)
+      {
+         get_pixel(input, x, y, &r, &g, &b);
+
+         r = r < 255 / (matrix[dy][dx] + 1) ? 0 : 255;
+         g = g < 255 / (matrix[dy][dx] + 1) ? 0 : 255;
+         b = b < 255 / (matrix[dy][dx] + 1) ? 0 : 255;
+
+         set_pixel(out_image, x, y, r, g, b);
+         dx = (dx + 1) % matrix_size;
+      }
+
+      dy = (dy + 1) % matrix_size;
+   }
+
+   return out_image;
+}
+
+Image floyd_steinberg_dithering(Image input)
+{
+   #define IX(x, y) ((x) + (y) * (input.width))
+
+   Image out_image = alloc_image(input.width, input.height);
+
+   float ratio1 = 7.0 / 16.0;
+   float ratio2 = 3.0 / 16.0;
+   float ratio3 = 5.0 / 16.0;
+   float ratio4 = 1.0 / 16.0;
+   
+   float* values = calloc(input.width * input.height, sizeof(float));
+   int r, g, b;
+   float error;
+
+   for (int y = 0; y < input.height; ++y)
+   {
+      for (int x = 0; x < input.width; ++x)
+      {
+         get_pixel(input, x, y, &r, &g, &b);
+
+         values[IX(x, y)] += r;
+         
+         if (values[IX(x, y)] < 255.0 / 2.0)
+         {
+            error = values[IX(x, y)];
+            values[IX(x, y)] = 0.0;
+         }
+         else
+         {
+            error = values[IX(x, y)] - 255.0;
+            values[IX(x, y)] = 255.0;
+         }
+
+         if (x < input.width - 1)
+         {
+            values[IX(x + 1, y)] += ratio1 * error;
+         }
+
+         if (x > 0 && y < input.height - 1)
+         {
+            values[IX(x - 1, y + 1)] += ratio2 * error;
+         }
+
+         if (y < input.height - 1)
+         {
+            values[IX(x, y + 1)] += ratio3 * error;
+         }
+
+         if (x < input.width - 1 && y < input.height - 1)
+         {
+            values[IX(x + 1, y + 1)] += ratio4 * error;
+         }
+
+         set_pixel(out_image, x, y, values[IX(x, y)], values[IX(x, y)], values[IX(x, y)]);
+      }
+   }
+
+   free(values);
    return out_image;
 }
 
@@ -93,26 +182,43 @@ void process(Image input, const char *input_file_path)
    write_png_file(output_file_path, lum);
 
    Image d2x2 = ordered_dithering(lum, 2, dithering2x2);
-   Image d3x3 = ordered_dithering(lum, 3, dithering3x3);
-   Image d4x4 = ordered_dithering(lum, 4, dithering4x4);
-   Image d8x8 = ordered_dithering(lum, 8, dithering8x8);
 
    output_file_path = add_infix(input_file_path, ".2x2");
    printf("Saving %s\n", output_file_path);
    write_png_file(output_file_path, d2x2);
 
+   Image d3x3 = ordered_dithering(lum, 3, dithering3x3);
+
    output_file_path = add_infix(input_file_path, ".3x3");
    printf("Saving %s\n", output_file_path);
    write_png_file(output_file_path, d3x3);
+
+   Image d4x4 = ordered_dithering(lum, 4, dithering4x4);
 
    output_file_path = add_infix(input_file_path, ".4x4");
    printf("Saving %s\n", output_file_path);
    write_png_file(output_file_path, d4x4);
 
+   Image d8x8 = ordered_dithering(lum, 8, dithering8x8);
+
    output_file_path = add_infix(input_file_path, ".8x8");
    printf("Saving %s\n", output_file_path);
    write_png_file(output_file_path, d8x8);
 
+   Image d2x2c = ordered_color_dithering(input, 2, dithering2x2);
+
+   output_file_path = add_infix(input_file_path, ".2x2c");
+   printf("Saving %s\n", output_file_path);
+   write_png_file(output_file_path, d2x2c);
+
+   Image fs = floyd_steinberg_dithering(lum);
+
+   output_file_path = add_infix(input_file_path, ".fs");
+   printf("Saving %s\n", output_file_path);
+   write_png_file(output_file_path, fs);
+
+   free_image(fs);
+   free_image(d2x2c);
    free_image(d8x8);
    free_image(d4x4);
    free_image(d3x3);
