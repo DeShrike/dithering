@@ -89,6 +89,106 @@ Image ordered_color_dithering(Image input, int matrix_size, int matrix[matrix_si
    return out_image;
 }
 
+Image floyd_steinberg_color_dithering(Image input)
+{
+   #define IX(x, y) ((x) + (y) * (input.width))
+
+   Image out_image = alloc_image(input.width, input.height);
+
+   float ratio1 = 7.0 / 16.0;
+   float ratio2 = 3.0 / 16.0;
+   float ratio3 = 5.0 / 16.0;
+   float ratio4 = 1.0 / 16.0;
+   
+   float* valuesr = calloc(input.width * input.height, sizeof(float));
+   float* valuesg = calloc(input.width * input.height, sizeof(float));
+   float* valuesb = calloc(input.width * input.height, sizeof(float));
+   int r, g, b;
+   float errorr;
+   float errorg;
+   float errorb;
+
+   for (int y = 0; y < input.height; ++y)
+   {
+      for (int x = 0; x < input.width; ++x)
+      {
+         get_pixel(input, x, y, &r, &g, &b);
+
+         valuesr[IX(x, y)] += r;
+         valuesg[IX(x, y)] += g;
+         valuesb[IX(x, y)] += b;
+         
+         if (valuesr[IX(x, y)] < 255.0 / 2.0)
+         {
+            errorr = valuesr[IX(x, y)];
+            valuesr[IX(x, y)] = 0.0;
+         }
+         else
+         {
+            errorr = valuesr[IX(x, y)] - 255.0;
+            valuesr[IX(x, y)] = 255.0;
+         }
+
+         if (valuesg[IX(x, y)] < 255.0 / 2.0)
+         {
+            errorg = valuesg[IX(x, y)];
+            valuesg[IX(x, y)] = 0.0;
+         }
+         else
+         {
+            errorg = valuesg[IX(x, y)] - 255.0;
+            valuesg[IX(x, y)] = 255.0;
+         }
+
+         if (valuesb[IX(x, y)] < 255.0 / 2.0)
+         {
+            errorb = valuesb[IX(x, y)];
+            valuesb[IX(x, y)] = 0.0;
+         }
+         else
+         {
+            errorb = valuesb[IX(x, y)] - 255.0;
+            valuesb[IX(x, y)] = 255.0;
+         }
+
+         if (x < input.width - 1)
+         {
+            valuesr[IX(x + 1, y)] += ratio1 * errorr;
+            valuesg[IX(x + 1, y)] += ratio1 * errorg;
+            valuesb[IX(x + 1, y)] += ratio1 * errorb;
+         }
+
+         if (x > 0 && y < input.height - 1)
+         {
+            valuesr[IX(x - 1, y + 1)] += ratio2 * errorr;
+            valuesg[IX(x - 1, y + 1)] += ratio2 * errorg;
+            valuesb[IX(x - 1, y + 1)] += ratio2 * errorb;
+         }
+
+         if (y < input.height - 1)
+         {
+            valuesr[IX(x, y + 1)] += ratio3 * errorr;
+            valuesg[IX(x, y + 1)] += ratio3 * errorg;
+            valuesb[IX(x, y + 1)] += ratio3 * errorb;
+         }
+
+         if (x < input.width - 1 && y < input.height - 1)
+         {
+            valuesr[IX(x + 1, y + 1)] += ratio4 * errorr;
+            valuesg[IX(x + 1, y + 1)] += ratio4 * errorg;
+            valuesb[IX(x + 1, y + 1)] += ratio4 * errorb;
+         }
+
+         set_pixel(out_image, x, y, valuesr[IX(x, y)], valuesg[IX(x, y)], valuesb[IX(x, y)]);
+      }
+   }
+
+   free(valuesr);
+   free(valuesg);
+   free(valuesb);
+   return out_image;
+}
+
 Image floyd_steinberg_dithering(Image input)
 {
    #define IX(x, y) ((x) + (y) * (input.width))
@@ -217,6 +317,13 @@ void process(Image input, const char *input_file_path)
    printf("Saving %s\n", output_file_path);
    write_png_file(output_file_path, fs);
 
+   Image fsc = floyd_steinberg_color_dithering(input);
+
+   output_file_path = add_infix(input_file_path, ".fsc");
+   printf("Saving %s\n", output_file_path);
+   write_png_file(output_file_path, fsc);
+
+   free_image(fsc);
    free_image(fs);
    free_image(d2x2c);
    free_image(d8x8);

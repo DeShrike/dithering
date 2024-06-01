@@ -1,3 +1,5 @@
 *.o
 *.png
 dithering
+!cat.png
+!jane.png
