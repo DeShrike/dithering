@@ -49,14 +49,16 @@ Image ordered_dithering(Image input, int matrix_size, int matrix[matrix_size][ma
       for (int x = 0; x < input.width; ++x)
       {
          get_pixel(input, x, y, &r, &g, &b);
+         int d = 255.0 / (matrix_size * matrix_size);
 
-         int c = r < 255 / (matrix[dy][dx] + 1) ? 0 : 255;
+         int c = r <= (d * (matrix[dy][dx] + 1)) ? 0 : 255;
 
          set_pixel(out_image, x, y, c, c, c);
          dx = (dx + 1) % matrix_size;
       }
 
       dy = (dy + 1) % matrix_size;
+      dx = 0;
    }
 
    return out_image;
